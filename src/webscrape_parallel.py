@@ -1,5 +1,12 @@
 #import the library used to query a website
-import time, sys, re, datetime, os, urllib.request, random
+import time
+import sys
+import re
+import datetime
+import multiprocessing
+import os
+import urllib.request
+import random
 import pandas as pd
 from os import system
 from urllib.parse import urlparse
@@ -11,16 +18,17 @@ parent_page = "https://www.sapdatasheet.org/abap/tabl/ekko.html"
 child_page = "https://www.sapdatasheet.org/abap/dtel/spras.html"
 file_name = parent_page.split("/")[-1].split(".")[0]
 output_dir = os.getenv("HOME") + "/"
-
-#soup_parser = "lxml"
+soup_parser = "lxml"
 #using html5lib parser in multiprocessing mode is throwing issues. Hence reverting back to lxml parser
-soup_parser = "html5lib"
+#soup_parser = "html5lib"
 
 #Overall there was drastic performance jump with using Multiprocessing.
 #In 1 case, where the original process was taking ~3m to excute, the
 #multi process execution with 6 threads, completed in just 20s
 
 #Abstract Method to get some soup out of a webpage
+
+
 def _get_soup(page):
     #fetch the page
     page_html = urllib.request.urlopen(page)
@@ -30,70 +38,74 @@ def _get_soup(page):
 
 
 #Parse respective metadata for a single row from given table-row element
-def _parse_column(num, row, df, page):
-    row_arr = []
+def _parse_column(num, html, page, col_q):
+    row = BeautifulSoup(html, soup_parser)
+
+    row_arr = list()
     columns = row.find_all("td")
 
-    try:
-        #Adding Field and href
-        #row_arr.append(columns[1].a.text + " >> " + columns[1].a['href'])
-        if columns[1].a is not None:
-            row_arr.append(columns[1].a.text)
-            #print("column #" + str(num) + " name : " + columns[1].a.text)
-        else:
-            row_arr.append("-")
+    # try:
+    #Adding Field and href
+    #row_arr.append(columns[1].a.text + " >> " + columns[1].a['href'])
+    if columns[1].a is not None:
+        row_arr.append(columns[1].a.text)
+        #print("column #" + str(num) + " name : " + columns[1].a.text)
+    else:
+        row_arr.append("-")
 
-        #Adding key flag
-        # if 'checked' in columns[2].input.attrs:
-        #     row_arr.append(columns[2].input['checked'])
-        # else:
-        #     row_arr.append('NA')
+    #Adding key flag
+    # if 'checked' in columns[2].input.attrs:
+    #     row_arr.append(columns[2].input['checked'])
+    # else:
+    #     row_arr.append('NA')
 
-        if columns[3].a is not None:
-            documentation = _parse_child(
-                _get_domain(page) + columns[3].a['href'])
+    if columns[3].a is not None:
+        documentation = _parse_child(
+            _get_domain(page) + columns[3].a['href'])
 
-            #Adding Element and href
-            row_arr.append(columns[3].a.text)
-            row_arr.append(re.sub(r"\n", "_NL_", documentation))
-        else:
-            row_arr.append("-")
-            row_arr.append("-")
+        #Adding Element and href
+        row_arr.append(columns[3].a.text)
+        row_arr.append(re.sub(r"\n", "_NL_", documentation))
+    else:
+        row_arr.append("-")
+        row_arr.append("-")
 
-        #Adding Domain and href
-        #row_arr.append(columns[4].a.text + " >> " + columns[4].a['href'])
-        if columns[4].a is not None:
-            row_arr.append(columns[4].a.text)
-        else:
-            row_arr.append("-")
+    #Adding Domain and href
+    #row_arr.append(columns[4].a.text + " >> " + columns[4].a['href'])
+    if columns[4].a is not None:
+        row_arr.append(columns[4].a.text)
+    else:
+        row_arr.append("-")
 
-        #Adding datatype
-        #row_arr.append(columns[5].a.text + " >> " + columns[5].a['href'])
-        if columns[5].a is not None:
-            row_arr.append(columns[5].a.text)
-        else:
-            row_arr.append("-")
+    #Adding datatype
+    #row_arr.append(columns[5].a.text + " >> " + columns[5].a['href'])
+    if columns[5].a is not None:
+        row_arr.append(columns[5].a.text)
+    else:
+        row_arr.append("-")
 
-        #Adding Length
-        row_arr.append(columns[6].string.strip())
+    #Adding Length
+    row_arr.append(columns[6].string.strip())
 
-        #Adding Decimal
-        row_arr.append(columns[7].string.strip())
+    #Adding Decimal
+    row_arr.append(columns[7].string.strip())
 
-        #Adding description
-        row_arr.append(columns[8].string.strip())
+    #Adding description
+    row_arr.append(columns[8].string.strip())
 
-        #Adding checktable
-        # if columns[9].a is None:
-        #     row_arr.append('')
-        # else:
-        #     row_arr.append(columns[9].a.text.strip() + " >> "+ columns[9].a['href'])
+    #Adding checktable
+    # if columns[9].a is None:
+    #     row_arr.append('')
+    # else:
+    #     row_arr.append(columns[9].a.text.strip() + " >> "+ columns[9].a['href'])
 
-        df.loc[num] = row_arr
-    except:
-        print("[ERROR] Unexpected error:", str(sys.exc_info()))
-        print(str(columns))
-        print(columns[1].a.text)
+    #df.loc[num] = row_arr
+    col_q.put(row_arr)
+    return 0
+    # except:
+    #     print("[ERROR] Unexpected error:", str(sys.exc_info()))
+    #     print(str(columns))
+    #     print(columns[1].a.text)
 
 
 #Parse the top level parent page for necessary metadata
@@ -104,11 +116,11 @@ def _parse_parent(page):
     top_divs = soup.find_all("div", {"class": "container-fluid"})
 
     #picking the 2nd div in the list, since that's having the requisite content
-    div_2=top_divs[1]
+    div_2 = top_divs[1]
 
     #get the main body of this div
     main = div_2.main
-    card = main.find("div",{"class":"card"})
+    card = main.find("div", {"class": "card"})
     card_body = card.find("div", {"class": "sapds-card-body"})
 
     #Assuming first element in this list will be the content table
@@ -116,7 +128,8 @@ def _parse_parent(page):
 
     #get the headers
     #table_header = table_content.thead
-    header_arr = ['Field','ELement','Element Definition','Domain','Data Type','Length','Decimal','Description']
+    header_arr = ['Field', 'ELement', 'Element Definition',
+                  'Domain', 'Data Type', 'Length', 'Decimal', 'Description']
 
     # for th in table_header.find_all("th"):
     #     if th.string is not None:
@@ -131,8 +144,27 @@ def _parse_parent(page):
     #get table body
     table_body = table_content.tbody
 
+    # Number of processes to create
+    PROCS = multiprocessing.cpu_count() - 1
+    print("# of Processes > " + str(PROCS))
+
+    # use all available cores, otherwise specify the number you want as an argument
+    pool = multiprocessing.Pool(PROCS)
+    col_q = multiprocessing.Manager().Queue()
+
     for num, row in enumerate(table_body.find_all("tr"), start=1):
-        _parse_column(num, row, df, page)
+        html = str(row)
+        pool.apply_async(_parse_column, (num, html, page, col_q, ))
+        #print(result.get())
+        #_parse_column(num, row, df, page)
+
+    pool.close()
+    pool.join()
+
+    i = 0
+    while not col_q.empty():
+        i += 1
+        df.loc[i] = col_q.get()
 
     return df
 
@@ -175,7 +207,8 @@ if __name__ == "__main__":
 
     #soup_parser = "html5lib"
     df = _parse_parent(parent_page)
-    df.to_csv(output_dir + file_name + "-" + str(int(time.time())) + ".csv", sep='\t')
+    df.to_csv(output_dir + file_name + "-" +
+              str(int(time.time())) + ".csv", sep='\t')
 
     #print(_parse_child(child_page))
 
