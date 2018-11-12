@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 
 #wiki = "https://en.wikipedia.org/wiki/List_of_state_and_union_territory_capitals_in_India"
 simple_page = "https://dataquestio.github.io/web-scraping-pages/simple.html"
-parent_page = "https://www.sapdatasheet.org/abap/tabl/eban.html"
+parent_page = "https://www.sapdatasheet.org/abap/tabl/skat.html"
 child_page = "https://www.sapdatasheet.org/abap/dtel/spras.html"
 file_name = parent_page.split("/")[-1].split(".")[0]
 output_dir = os.getenv("HOME") + "/"
